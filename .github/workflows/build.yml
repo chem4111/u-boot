@@ -18,7 +18,7 @@ jobs:
 
       - name: Download toolchain
         run: |
-          curl -L -O https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          curl -L -O https://mirrors.zju.edu.cn/armbian-releases/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: Build
