@@ -14,12 +14,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install make imagemagick fonts-dejavu
+          sudo apt install make imagemagick fonts-dejavu hub
 
       - name: Download toolchain
         run: |
-          curl -L -O https://mirrors.zju.edu.cn/armbian-releases/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          curl --retry 3 --retry-all-errors --http1.1 -L -O https://mirrors.zju.edu.cn/armbian-releases/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+        # 如果浙大镜像持续超时，注释上面curl，启用下面原版linaro地址（国外runner更稳）
+        # run: |
+        #   curl --retry 3 --retry-all-errors --http1.1 -L -O https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+        #   tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: Build
         run: |
@@ -32,7 +36,7 @@ jobs:
       - name: Download AmlImg
         run: |
           ver="v0.3.0"
-          curl -L -o ./AmlImg https://github.com/hzyitc/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+          curl --retry 3 --retry-all-errors --http1.1 -L -o ./AmlImg https://github.com/hzyitc/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
           chmod +x ./AmlImg
 
       - name: Generate resource
@@ -113,6 +117,10 @@ jobs:
             build/resource.img
             build/eMMC.burn.img
 
+      # ==========重要提醒 Release 部分 ==========
+      # 注意：默认 GITHUB_TOKEN 无法创建 Release！
+      # 需要你在仓库 Secrets 配置一个 PAT 令牌（权限：contents write），名字建议叫 PAT_TOKEN
+      # env 改成 PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Release
         run: |
           time="${{ github.event.head_commit.timestamp }}"
@@ -124,4 +132,4 @@ jobs:
             -a build/resource.img \
             -a build/eMMC.burn.img
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
