@@ -14,16 +14,17 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y make imagemagick fonts-dejavu hub
+          sudo apt install make imagemagick ttf-dejavu
 
       - name: Download toolchain
         run: |
-          curl -L -O https://redirect.armbian.com/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          curl -L -O https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: Build
         run: |
           export PATH="$PATH:$(pwd)/gcc-linaro-arm-none-eabi-4.8-2014.04_linux/bin"
+
           make distclean
           make m8b_onecloud_config
           make -j$(nproc)
@@ -37,11 +38,13 @@ jobs:
       - name: Generate resource
         run: |
           mkdir -p resource
+
           convert \
             -size 640x360 \
             -background black \
-            -gravity center -font "DejaVuSans" -pointsize 64 -fill white label:"U-Boot" \
+            -gravity center -font "DejaVu-Sans" -pointsize 64 -fill white label:"U-Boot" \
             BMP3:resource/bootup.bmp
+
           cat <<EOF >resource/list.txt
           090000:bootup:bootup.bmp
           EOF
@@ -50,6 +53,7 @@ jobs:
       - name: Generate eMMC burn image
         run: |
           mkdir -p pack
+
           cp build/ddr_init.bin pack/DDR.USB
           cp build/u-boot-comp.bin pack/UBOOT_COMP.USB
 
@@ -58,8 +62,11 @@ jobs:
           erase_bootloader    = 1
           erase_flash         = 0
           reboot              = 0
+
+          ;package will filled by sdacard burning tool
           [burn_ex]
           package     = aml_upgrade_package.img
+          ;media       =
           EOF
 
           cat <<EOF >pack/platform.conf
@@ -73,18 +80,27 @@ jobs:
 
           cp build/u-boot.bin pack/bootloader.img
           echo -n "sha1sum $(sha1sum pack/bootloader.img | awk '{print $1}')" >pack/bootloader.VERIFY
+
           cp build/resource.img pack/resource.img
           echo -n "sha1sum $(sha1sum pack/resource.img | awk '{print $1}')" >pack/resource.VERIFY
 
           cat <<EOF >pack/commands.txt
           USB:DDR:normal:DDR.USB
           USB:UBOOT_COMP:normal:UBOOT_COMP.USB
+
           ini:aml_sdc_burn:normal:aml_sdc_burn.ini
           conf:platform:normal:platform.conf
+
           PARTITION:bootloader:normal:bootloader.img
           VERIFY:bootloader:normal:bootloader.VERIFY
+
           PARTITION:resource:normal:resource.img
           VERIFY:resource:normal:resource.VERIFY
+
+          # PARTITION:boot:normal:boot.img
+          # VERIFY:boot:normal:boot.VERIFY
+          # PARTITION:rootfs:normal:rootfs.img
+          # VERIFY:rootfs:normal:rootfs.VERIFY
           EOF
 
           ./AmlImg pack build/eMMC.burn.img pack/
@@ -103,7 +119,7 @@ jobs:
           sha="${GITHUB_SHA:0:8}"
           tag="build-$(date +'%Y%m%d-%H%M' -d "$time")"
           message="Auto-Build $(date +'%Y-%m-%d %H:%M' -d "$time")"
-          hub release create -t "$GITHUB_SHA" "$tag" -m "$message" \
+          hub release create  -t "$GITHUB_SHA" "$tag" -m "$message" \
             $(for a in build/*.bin; do echo -a $a; done) \
             -a build/resource.img \
             -a build/eMMC.burn.img
