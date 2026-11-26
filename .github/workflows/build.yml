@@ -19,12 +19,17 @@ jobs:
       - name: Download toolchain
         run: |
           set -e
-          URL="https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz"
+          URL="https://github.com/armbian/build/raw/master/cache/ccache/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz"
           for i in {1..5}; do
             echo "Attempt $i"
-            curl --connect-timeout 40 --max-time 300 --retry 2 --retry-all-errors --http1.1 -C - -L -O $URL && break
+            curl --connect-timeout 40 --max-time 300 --retry 2 --retry-all-errors --http1.1 -C - -L -O "$URL" && break
             sleep 10
           done
+          size=$(stat -c %s gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz)
+          if [ $size -lt 10000000 ]; then
+            echo "ERROR: Downloaded file too small, likely 404 html page"
+            exit 1
+          fi
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: Build
