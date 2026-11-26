@@ -14,21 +14,22 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install make imagemagick fonts-dejavu hub
+          sudo apt install make imagemagick fonts-dejavu hub gh
 
       - name: Download toolchain
         run: |
-          curl --retry 3 --retry-all-errors --http1.1 -L -O https://mirrors.zju.edu.cn/armbian-releases/_toolchain/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
+          set -e
+          URL="https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz"
+          for i in {1..5}; do
+            echo "Attempt $i"
+            curl --connect-timeout 40 --max-time 300 --retry 2 --retry-all-errors --http1.1 -C - -L -O $URL && break
+            sleep 10
+          done
           tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
-        # 如果浙大镜像持续超时，注释上面curl，启用下面原版linaro地址（国外runner更稳）
-        # run: |
-        #   curl --retry 3 --retry-all-errors --http1.1 -L -O https://releases.linaro.org/components/toolchain/binaries/4.8-2014.04/arm-none-eabi/gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
-        #   tar xvf ./gcc-linaro-arm-none-eabi-4.8-2014.04_linux.tar.xz
 
       - name: Build
         run: |
           export PATH="$PATH:$(pwd)/gcc-linaro-arm-none-eabi-4.8-2014.04_linux/bin"
-
           make distclean
           make m8b_onecloud_config
           make -j$(nproc)
@@ -36,19 +37,19 @@ jobs:
       - name: Download AmlImg
         run: |
           ver="v0.3.0"
-          curl --retry 3 --retry-all-errors --http1.1 -L -o ./AmlImg https://github.com/hzyitc/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+          gh release download $ver -R hzyitc/AmlImg --pattern "AmlImg_${ver}_linux_amd64" -O ./AmlImg
           chmod +x ./AmlImg
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Generate resource
         run: |
           mkdir -p resource
-
           convert \
             -size 640x360 \
             -background black \
             -gravity center -font "DejaVu-Sans" -pointsize 64 -fill white label:"U-Boot" \
             BMP3:resource/bootup.bmp
-
           cat <<EOF >resource/list.txt
           090000:bootup:bootup.bmp
           EOF
@@ -57,22 +58,18 @@ jobs:
       - name: Generate eMMC burn image
         run: |
           mkdir -p pack
-
           cp build/ddr_init.bin pack/DDR.USB
           cp build/u-boot-comp.bin pack/UBOOT_COMP.USB
-
           cat <<EOF >pack/aml_sdc_burn.ini
           [common]
           erase_bootloader    = 1
           erase_flash         = 0
           reboot              = 0
-
           ;package will filled by sdacard burning tool
           [burn_ex]
           package     = aml_upgrade_package.img
           ;media       =
           EOF
-
           cat <<EOF >pack/platform.conf
           Platform:0x0801
           BinPara:0xd9010000
@@ -81,32 +78,24 @@ jobs:
           Uboot_down:0x200000
           Uboot_decomp:0xd9000030
           EOF
-
           cp build/u-boot.bin pack/bootloader.img
           echo -n "sha1sum $(sha1sum pack/bootloader.img | awk '{print $1}')" >pack/bootloader.VERIFY
-
           cp build/resource.img pack/resource.img
           echo -n "sha1sum $(sha1sum pack/resource.img | awk '{print $1}')" >pack/resource.VERIFY
-
           cat <<EOF >pack/commands.txt
           USB:DDR:normal:DDR.USB
           USB:UBOOT_COMP:normal:UBOOT_COMP.USB
-
           ini:aml_sdc_burn:normal:aml_sdc_burn.ini
           conf:platform:normal:platform.conf
-
           PARTITION:bootloader:normal:bootloader.img
           VERIFY:bootloader:normal:bootloader.VERIFY
-
           PARTITION:resource:normal:resource.img
           VERIFY:resource:normal:resource.VERIFY
-
           # PARTITION:boot:normal:boot.img
           # VERIFY:boot:normal:boot.VERIFY
           # PARTITION:rootfs:normal:rootfs.img
           # VERIFY:rootfs:normal:rootfs.VERIFY
           EOF
-
           ./AmlImg pack build/eMMC.burn.img pack/
 
       - name: Upload artifacts
@@ -117,10 +106,6 @@ jobs:
             build/resource.img
             build/eMMC.burn.img
 
-      # ==========重要提醒 Release 部分 ==========
-      # 注意：默认 GITHUB_TOKEN 无法创建 Release！
-      # 需要你在仓库 Secrets 配置一个 PAT 令牌（权限：contents write），名字建议叫 PAT_TOKEN
-      # env 改成 PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Release
         run: |
           time="${{ github.event.head_commit.timestamp }}"
